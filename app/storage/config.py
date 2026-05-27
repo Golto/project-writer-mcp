@@ -21,7 +21,7 @@ def _default_config_folder() -> Path:
     """
     if sys.platform == "win32":
         base = Path.home() / "AppData" / "Roaming"
-        return base / "mcp-project-writer"
+        return base / "mcp-project-navigator"
     return Path.home() / ".config" / "scripts" / "mcp-project"
 
 
