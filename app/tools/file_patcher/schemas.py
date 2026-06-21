@@ -15,6 +15,8 @@ class PatchFileRequest(BaseModel):
         new_content: Replacement text for the specified line range.
                      May contain a different number of lines than the
                      range being replaced.
+        preview: When True, no write happens. Returns a unified diff of
+                 the change instead so the caller can verify it first.
     """
 
     project_id: str = Field(description="Registered project identifier.")
@@ -32,6 +34,14 @@ class PatchFileRequest(BaseModel):
     new_content: str = Field(
         description="Replacement content for the specified line range."
     )
+    preview: bool = Field(
+        default=False,
+        description=(
+            "If True, do not write anything. Instead return a unified diff "
+            "showing exactly what would change, with line numbers, so the "
+            "edit can be verified before it is applied for real."
+        ),
+    )
 
 
 class PatchFileResponse(BaseModel):
@@ -42,9 +52,19 @@ class PatchFileResponse(BaseModel):
         replaced_line_count: Number of original lines that were removed.
         inserted_line_count: Number of new lines that were inserted.
         total_lines: Total number of lines in the file after patching.
+        preview: Whether this response is a preview (no write occurred).
+        diff: Unified diff of the change. Always populated, in preview
+              mode and after a real write alike, so the caller always
+              has a way to see exactly what changed.
     """
 
     written_path: str = Field(description="Absolute path of the patched file.")
     replaced_line_count: int = Field(description="Number of original lines removed.")
     inserted_line_count: int = Field(description="Number of new lines inserted.")
     total_lines: int = Field(description="Total lines in the file after patching.")
+    preview: bool = Field(
+        description="True if this was a dry run and no write occurred."
+    )
+    diff: str = Field(
+        description="Unified diff (with line numbers) of the change."
+    )
