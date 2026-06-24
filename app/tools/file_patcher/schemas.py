@@ -35,11 +35,12 @@ class PatchFileRequest(BaseModel):
         description="Replacement content for the specified line range."
     )
     preview: bool = Field(
-        default=False,
+        default=True,
         description=(
-            "If True, do not write anything. Instead return a unified diff "
+            "If True (default), do not write anything. Instead return a unified diff "
             "showing exactly what would change, with line numbers, so the "
-            "edit can be verified before it is applied for real."
+            "edit can be verified before it is applied for real. "
+            "Set to False only after reviewing the diff and confirming the patch is correct."
         ),
     )
 
@@ -64,6 +65,12 @@ class PatchFileResponse(BaseModel):
     total_lines: int = Field(description="Total lines in the file after patching.")
     preview: bool = Field(
         description="True if this was a dry run and no write occurred."
+    )
+    message: str | None = Field(
+        description=(
+            "Set when preview=True. Reminds the caller that nothing was written "
+            "and that preview must be set to False to confirm the write."
+        )
     )
     diff: str = Field(
         description="Unified diff (with line numbers) of the change."

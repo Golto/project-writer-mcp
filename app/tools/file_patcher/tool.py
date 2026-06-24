@@ -63,15 +63,10 @@ def patch_project_file(request: PatchFileRequest) -> PatchFileResponse:
     inclusive. The replacement may contain any number of lines -- it does
     not need to match the size of the replaced range.
 
-    IMPORTANT: always call this tool once with preview=True first, and
-    read the returned diff carefully before calling it again with
-    preview=False (or omitted). The diff shows the exact line number of
-    every line that would be removed (-) or added (+), plus surrounding
-    unchanged context lines with their own line numbers. This catches
-    off-by-one mistakes (wrong start_line/end_line) and accidental
-    duplication or deletion of surrounding code before anything is written
-    to disk. Only skip the preview step if the caller has just reviewed
-    one for this exact same edit.
+    preview defaults to True. On the first call, the tool returns a
+    numbered diff of the change without writing anything. Read the diff,
+    verify that the correct lines are being replaced, then call the tool
+    again with preview=False to confirm and apply the write.
     """
     project_root = project_storage.resolve_project_path(request.project_id)
     target = (project_root / request.relative_path).resolve()
@@ -127,6 +122,10 @@ def patch_project_file(request: PatchFileRequest) -> PatchFileResponse:
             inserted_line_count=len(replacement_lines),
             total_lines=len(patched_lines),
             preview=True,
+            message=(
+                "PREVIEW ONLY -- nothing was written. "
+                "Review the diff above, then call this tool again with preview=False to apply the change."
+            ),
             diff=diff_text,
         )
 
@@ -138,5 +137,6 @@ def patch_project_file(request: PatchFileRequest) -> PatchFileResponse:
         inserted_line_count=len(replacement_lines),
         total_lines=len(patched_lines),
         preview=False,
+        message=None,
         diff=diff_text,
     )
