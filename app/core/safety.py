@@ -141,7 +141,7 @@ def resolve_entry_in_project(project_root: Path, relative_path: str | Path) -> P
 
     if candidate.name in ("", ".", ".."):
         raise PathOutsideProjectError(
-            f"Path '{relative_path}' does not designate a named file inside the project."
+            f"Path '{relative_path}' does not designate a named file or directory inside the project."
         )
 
     parent = (project_root / candidate.parent).resolve()

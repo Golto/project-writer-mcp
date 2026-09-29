@@ -35,8 +35,9 @@ def _list_candidate_paths(
     project_root: Path,
     opened_hidden_directories: frozenset[str],
     includes_hidden_files: bool,
+    lists_directories: bool,
 ) -> list[str]:
-    """Collect the relative paths of the project files that could be suggested.
+    """Collect the relative paths of the project entries that could be suggested.
 
     Args:
         project_root: Absolute path to the project root.
@@ -44,6 +45,7 @@ def _list_candidate_paths(
                                    explored. Every other hidden directory is
                                    skipped with its whole subtree.
         includes_hidden_files: Whether hidden files are candidates.
+        lists_directories: Collect directories instead of files.
 
     Returns:
         POSIX paths relative to the project root, at most MAX_SCANNED_FILES.
@@ -58,6 +60,11 @@ def _list_candidate_paths(
             and (not name.startswith(".") or name in opened_hidden_directories)
         )
         relative_directory = Path(directory).relative_to(project_root)
+        if lists_directories:
+            candidates.extend((relative_directory / name).as_posix() for name in subdirectory_names)
+            if len(candidates) >= MAX_SCANNED_FILES:
+                return candidates
+            continue
         for file_name in sorted(file_names):
             if file_name.startswith(".") and not includes_hidden_files:
                 continue
@@ -68,8 +75,12 @@ def _list_candidate_paths(
     return candidates
 
 
-def suggest_similar_paths(project_root: Path, requested_path: str | Path) -> list[str]:
-    """Propose existing project files that the caller most likely meant.
+def suggest_similar_paths(
+    project_root: Path,
+    requested_path: str | Path,
+    looks_for_directory: bool = False,
+) -> list[str]:
+    """Propose existing project files or directories that the caller most likely meant.
 
     Three strategies are combined, in this order of priority: files carrying
     the exact same name in another directory (a wrong folder), files whose
@@ -79,6 +90,7 @@ def suggest_similar_paths(project_root: Path, requested_path: str | Path) -> lis
     Args:
         project_root: Absolute path to the project root.
         requested_path: Path given by the caller that does not exist.
+        looks_for_directory: Suggest directories instead of files.
 
     Returns:
         Up to MAX_SUGGESTIONS relative paths, best candidates first. Empty
@@ -96,6 +108,7 @@ def suggest_similar_paths(project_root: Path, requested_path: str | Path) -> lis
         project_root,
         opened_hidden_directories=opened_hidden_directories,
         includes_hidden_files=requested.name.startswith("."),
+        lists_directories=looks_for_directory,
     )
 
     paths_by_name: dict[str, list[str]] = {}
@@ -121,20 +134,26 @@ def suggest_similar_paths(project_root: Path, requested_path: str | Path) -> lis
     return list(unique_suggestions)[:MAX_SUGGESTIONS]
 
 
-def build_not_found_message(project_root: Path, requested_path: str | Path, subject: str = "File") -> str:
+def build_not_found_message(
+    project_root: Path,
+    requested_path: str | Path,
+    subject: str = "File",
+    looks_for_directory: bool = False,
+) -> str:
     """Build a not-found message that helps the caller recover in one step.
 
     Args:
         project_root: Absolute path to the project root.
         requested_path: Path given by the caller that does not exist.
-        subject: What was looked for, capitalized ('File', 'Source file').
+        subject: What was looked for, capitalized ('File', 'Source directory').
+        looks_for_directory: Suggest directories instead of files.
 
     Returns:
         A message naming the missing path, followed by suggestions when some
         were found.
     """
     message = f"{subject} not found: '{requested_path}'."
-    suggestions = suggest_similar_paths(project_root, requested_path)
+    suggestions = suggest_similar_paths(project_root, requested_path, looks_for_directory)
 
     if suggestions:
         formatted = ", ".join(f"'{suggestion}'" for suggestion in suggestions)
