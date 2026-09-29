@@ -1,6 +1,6 @@
 from app.mcp import get_mcp
 from app.storage import get_project_storage
-from app.core import assert_within_project
+from app.core import resolve_entry_in_project
 
 from .schemas import DeleteFileRequest, DeleteFileResponse
 
@@ -14,13 +14,16 @@ def delete_file(request: DeleteFileRequest) -> DeleteFileResponse:
 
     Raises an error if the path is a directory -- this tool only deletes
     individual files. The target path must remain within the project root.
+    A symbolic link is deleted itself, never its target.
     """
     project_root = project_storage.resolve_project_path(request.project_id)
-    target = (project_root / request.relative_path).resolve()
+    target = resolve_entry_in_project(project_root, request.relative_path)
 
-    assert_within_project(project_root, target)
+    # NOTE: exists() follows symlinks, so a broken link would look missing.
+    is_link = target.is_symlink()
+    entry_exists = is_link or target.exists()
 
-    if not target.exists():
+    if not entry_exists:
         if request.allow_missing:
             return DeleteFileResponse(deleted_path=str(target), deleted=False)
         raise FileNotFoundError(
@@ -28,7 +31,7 @@ def delete_file(request: DeleteFileRequest) -> DeleteFileResponse:
             f"Set allow_missing=True to suppress this error."
         )
 
-    if target.is_dir():
+    if target.is_dir() and not is_link:
         raise IsADirectoryError(
             f"Path '{target}' is a directory. "
             f"This tool only deletes individual files."

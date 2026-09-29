@@ -1,6 +1,6 @@
 from app.mcp import get_mcp
 from app.storage import get_project_storage
-from app.core import assert_within_project
+from app.core import resolve_entry_in_project
 
 from .schemas import MoveFileRequest, MoveFileResponse
 
@@ -14,25 +14,26 @@ def move_file(request: MoveFileRequest) -> MoveFileResponse:
 
     Both source and destination must remain within the project root.
     Raises an error if the source does not exist or if the destination
-    already exists and overwrite is False.
+    already exists and overwrite is False. A symbolic link is moved itself,
+    never its target; a relative link may no longer resolve once moved.
     """
     project_root = project_storage.resolve_project_path(request.project_id)
 
-    source = (project_root / request.source_path).resolve()
-    destination = (project_root / request.destination_path).resolve()
+    source = resolve_entry_in_project(project_root, request.source_path)
+    destination = resolve_entry_in_project(project_root, request.destination_path)
 
-    assert_within_project(project_root, source)
-    assert_within_project(project_root, destination)
+    # NOTE: exists() follows symlinks, so a broken link would look missing.
+    source_is_link = source.is_symlink()
 
-    if not source.exists():
+    if not (source_is_link or source.exists()):
         raise FileNotFoundError(f"Source file '{source}' does not exist.")
 
-    if source.is_dir():
+    if source.is_dir() and not source_is_link:
         raise IsADirectoryError(
             f"Source '{source}' is a directory. This tool only moves individual files."
         )
 
-    destination_existed = destination.exists()
+    destination_existed = destination.is_symlink() or destination.exists()
 
     if destination_existed and not request.overwrite:
         raise FileExistsError(
