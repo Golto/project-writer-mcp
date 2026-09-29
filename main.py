@@ -7,8 +7,8 @@ TRANSPORTS = ("stdio", "sse")
 
 # --- Initialisation globale pour mcp dev/run ---
 # Ces imports déclenchent init() + enregistrement des outils
-from app.mcp import init
-init(allowed_hosts=None)
+from app.mcp import init, configure_transport_security
+init()
 
 from app.storage import configure_storage
 
@@ -42,6 +42,21 @@ mcp = get_mcp()  # objet global visible par `mcp dev` et `mcp run`
 # -----------------------------------------------
 
 
+def _parse_allowed_hosts(raw_value: str) -> list[str]:
+    """Split a comma separated --allowed-hosts value into clean host entries.
+
+    Surrounding whitespace is stripped and empty entries are dropped, so that
+    "a:*, b:*," yields ["a:*", "b:*"].
+
+    Args:
+        raw_value: The raw flag value, without the "--allowed-hosts=" prefix.
+
+    Returns:
+        The list of non-empty host entries.
+    """
+    return [host.strip() for host in raw_value.split(",") if host.strip()]
+
+
 def main() -> None:
     transport = "stdio"
     host = "0.0.0.0"
@@ -56,7 +71,7 @@ def main() -> None:
         elif arg.startswith("--port="):
             port = int(arg.split("=", 1)[1])
         elif arg.startswith("--allowed-hosts="):
-            allowed_hosts = arg.split("=", 1)[1].split(",")
+            allowed_hosts = _parse_allowed_hosts(arg.split("=", 1)[1])
 
     if transport not in TRANSPORTS:
         logging.warning(
@@ -67,8 +82,10 @@ def main() -> None:
         sys.exit(1)
 
     if transport == "sse":
-        # Re-init avec allowed_hosts pour SSE
-        init(allowed_hosts=allowed_hosts)
+        # NOTE: on modifie l'instance existante au lieu d'en recréer une,
+        # sinon les outils enregistrés à l'import seraient perdus et la
+        # protection ne serait jamais appliquée au serveur réellement lancé.
+        configure_transport_security(allowed_hosts)
         mcp.settings.host = host
         mcp.settings.port = port
 

@@ -13,8 +13,8 @@ def delete_file(request: DeleteFileRequest) -> DeleteFileResponse:
     """Delete a file from a registered project.
 
     Raises an error if the path is a directory -- this tool only deletes
-    individual files. The target path must remain within the project root.
-    A symbolic link is deleted itself, never its target.
+    individual files. The target path must remain within the project root,
+    outside '.git'. A symbolic link is deleted itself, never its target.
     """
     project_root = project_storage.resolve_project_path(request.project_id)
     target = resolve_entry_in_project(project_root, request.relative_path)

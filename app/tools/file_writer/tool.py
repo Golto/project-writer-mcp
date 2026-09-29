@@ -1,6 +1,6 @@
 from app.mcp import get_mcp
 from app.storage import get_project_storage
-from app.core import assert_within_project
+from app.core import resolve_path_in_project, write_bytes_atomically
 
 from .schemas import WriteFileRequest, WriteFileResponse
 
@@ -14,12 +14,16 @@ def write_project_file(request: WriteFileRequest) -> WriteFileResponse:
 
     Creates the file if it does not exist, or overwrites it entirely if it
     does. Intermediate directories are created when create_parents is True.
-    The target path must remain within the project root.
+    The target path must remain within the project root, outside '.git'.
+    The write is atomic: an interrupted call leaves the previous content.
     """
     project_root = project_storage.resolve_project_path(request.project_id)
-    target = (project_root / request.relative_path).resolve()
+    target = resolve_path_in_project(project_root, request.relative_path)
 
-    assert_within_project(project_root, target)
+    if target.is_dir():
+        raise IsADirectoryError(
+            f"'{request.relative_path}' is a directory. Give the path of a file inside it."
+        )
 
     is_new_file = not target.exists()
 
@@ -32,7 +36,7 @@ def write_project_file(request: WriteFileRequest) -> WriteFileResponse:
         )
 
     encoded = request.content.encode("utf-8")
-    target.write_bytes(encoded)
+    write_bytes_atomically(target, encoded)
 
     return WriteFileResponse(
         written_path=str(target),

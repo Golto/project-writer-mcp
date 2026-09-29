@@ -1,6 +1,6 @@
 from app.mcp import get_mcp
 from app.storage import get_project_storage
-from app.core import assert_within_project
+from app.core import resolve_path_in_project
 
 from .schemas import CreateDirectoryRequest, CreateDirectoryResponse
 
@@ -13,15 +13,17 @@ def create_directory(request: CreateDirectoryRequest) -> CreateDirectoryResponse
     """Create a directory (and all missing parents) inside a registered project.
 
     Behaves like `mkdir -p`. The target path must remain within the
-    project root.
+    project root, outside '.git'.
     """
     project_root = project_storage.resolve_project_path(request.project_id)
-    target = (project_root / request.relative_path).resolve()
-
-    assert_within_project(project_root, target)
+    target = resolve_path_in_project(project_root, request.relative_path)
 
     already_exists = target.exists()
 
+    if already_exists and not target.is_dir():
+        raise FileExistsError(
+            f"'{request.relative_path}' already exists and is a file, not a directory."
+        )
     if already_exists and not request.exist_ok:
         raise FileExistsError(
             f"Directory '{target}' already exists. "

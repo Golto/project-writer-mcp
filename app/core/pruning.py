@@ -1,5 +1,7 @@
 from pathlib import Path
 
+from .safety import PROTECTED_ENTRY_NAMES
+
 
 def collect_empty_directories(root: Path, include_hidden: bool) -> list[Path]:
     """Collect all empty directories under root in bottom-up order.
@@ -11,6 +13,8 @@ def collect_empty_directories(root: Path, include_hidden: bool) -> list[Path]:
     When include_hidden is False, any directory whose name starts with '.'
     is excluded along with its entire subtree -- the walk does not descend
     into it at all. This protects .git, .venv, and similar directories.
+    Protected entries such as .git are skipped even when include_hidden is
+    True: an empty '.git/refs/tags' is part of a valid repository.
 
     Args:
         root: Absolute path to the directory to inspect.
@@ -56,8 +60,10 @@ def _collect_recursive(
             continue
 
         if child.is_dir():
-            if not include_hidden and child.name.startswith("."):
-                # Hidden subtree: do not descend, treat as surviving content.
+            is_protected = child.name.casefold() in PROTECTED_ENTRY_NAMES
+            is_skipped_hidden = not include_hidden and child.name.startswith(".")
+            if is_protected or is_skipped_hidden:
+                # Skipped subtree: do not descend, treat as surviving content.
                 has_surviving_child = True
                 continue
 

@@ -1,6 +1,6 @@
 from app.mcp import get_mcp
 from app.storage import get_project_storage
-from app.core import assert_within_project
+from app.core import resolve_path_in_project
 from app.core.pruning import collect_empty_directories
 
 from .schemas import PruneEmptyDirectoriesRequest, PruneEmptyDirectoriesResponse
@@ -18,13 +18,13 @@ def prune_empty_directories(request: PruneEmptyDirectoriesRequest) -> PruneEmpty
     root itself is never removed -- only its descendants.
 
     Hidden directories (names starting with '.') are skipped by default.
-    Set include_hidden=True to include them in the sweep.
+    Set include_hidden=True to include them in the sweep. '.git' is never
+    swept, whatever include_hidden says.
     """
     project_root = project_storage.resolve_project_path(request.project_id)
 
     if request.relative_path is not None:
-        prune_root = (project_root / request.relative_path).resolve()
-        assert_within_project(project_root, prune_root)
+        prune_root = resolve_path_in_project(project_root, request.relative_path)
     else:
         prune_root = project_root
 
