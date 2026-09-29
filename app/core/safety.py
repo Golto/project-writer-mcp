@@ -13,29 +13,34 @@ Windows and macOS default filesystems.
 """
 
 
+class PathOutsideProjectError(PermissionError):
+    """Raised when a user-supplied path is absolute or resolves outside the project root."""
+
+
 class ProtectedPathError(PermissionError):
     """Raised when a path designates or crosses a protected entry such as '.git'."""
 
 
-def assert_within_project(project_root: Path, target: Path) -> None:
+def assert_within_project(project_root: Path, target: Path, requested_path: str | Path) -> None:
     """Raise an error if target is outside the project root.
 
     Prevents path-traversal attacks where a relative_path like
     '../../etc/passwd' would escape the registered project directory.
+    The message only quotes the path given by the caller, never the
+    absolute location of the project on disk.
 
     Args:
         project_root: Absolute, resolved path to the project root.
         target: Absolute, resolved path to the file or directory to validate.
+        requested_path: Path as given by the caller, quoted in the message.
 
     Raises:
-        PermissionError: If target is not contained within project_root.
+        PathOutsideProjectError: If target is not contained within project_root.
     """
-    try:
-        target.relative_to(project_root)
-    except ValueError:
-        raise PermissionError(
-            f"Path '{target}' is outside the registered project root '{project_root}'. "
-            f"Write operations are restricted to the project directory."
+    if not target.is_relative_to(project_root):
+        raise PathOutsideProjectError(
+            f"Path '{requested_path}' resolves outside the project root. "
+            f"Only files inside the project can be modified."
         )
 
 
@@ -78,20 +83,20 @@ def resolve_path_in_project(project_root: Path, relative_path: str | Path) -> Pa
         The absolute, fully resolved path.
 
     Raises:
-        PermissionError: If relative_path is absolute or resolves outside
-                         project_root.
+        PathOutsideProjectError: If relative_path is absolute or resolves
+                                 outside project_root.
         ProtectedPathError: If the resolved path is inside a protected entry.
     """
     candidate = Path(relative_path)
 
     if candidate.is_absolute():
-        raise PermissionError(
+        raise PathOutsideProjectError(
             f"Absolute paths are not allowed: '{relative_path}'. "
             f"Use a path relative to the project root, such as 'src/main.py'."
         )
 
     target = (project_root / candidate).resolve()
-    assert_within_project(project_root, target)
+    assert_within_project(project_root, target, relative_path)
     assert_not_protected(project_root, target)
     return target
 
@@ -121,27 +126,43 @@ def resolve_entry_in_project(project_root: Path, relative_path: str | Path) -> P
         final component left untouched.
 
     Raises:
-        PermissionError: If relative_path is absolute, does not designate
-                         a named entry ('.', '..', 'dir/..'), or its parent
-                         resolves outside project_root.
+        PathOutsideProjectError: If relative_path is absolute, does not
+                                 designate a named entry ('.', '..', 'dir/..'),
+                                 or its parent resolves outside project_root.
         ProtectedPathError: If the entry is or lies inside a protected entry.
     """
     candidate = Path(relative_path)
 
     if candidate.is_absolute():
-        raise PermissionError(
+        raise PathOutsideProjectError(
             f"Absolute paths are not allowed: '{relative_path}'. "
             f"Use a path relative to the project root, such as 'src/main.py'."
         )
 
     if candidate.name in ("", ".", ".."):
-        raise PermissionError(
+        raise PathOutsideProjectError(
             f"Path '{relative_path}' does not designate a named file inside the project."
         )
 
     parent = (project_root / candidate.parent).resolve()
-    assert_within_project(project_root, parent)
+    assert_within_project(project_root, parent, relative_path)
 
     entry = parent / candidate.name
     assert_not_protected(project_root, entry)
     return entry
+
+
+def to_relative_display(project_root: Path, path: Path) -> str:
+    """Express a path inside the project as the caller should see it.
+
+    Every message and tool output goes through this helper, so the absolute
+    location of the project on disk never reaches the caller.
+
+    Args:
+        project_root: Absolute, resolved path to the project root.
+        path: Absolute path inside project_root.
+
+    Returns:
+        A POSIX path relative to the project root, '.' for the root itself.
+    """
+    return path.relative_to(project_root).as_posix()

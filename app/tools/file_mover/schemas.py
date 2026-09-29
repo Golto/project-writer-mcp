@@ -21,12 +21,15 @@ class MoveFileRequest(BaseModel):
                    the destination already exists. Defaults to False.
     """
 
-    project_id: str = Field(description="Registered project identifier.")
+    project_id: str = Field(description="Registered project identifier, as returned by list_projects.")
     source_path: str = Field(
-        description="Current path of the file, relative to the project root."
+        description="Current path of the file, relative to the project root.",
     )
     destination_path: str = Field(
-        description="Target path for the file, relative to the project root."
+        description=(
+            "New path of the file, relative to the project root, including its "
+            "file name (e.g. 'app/utils/helpers.py', not 'app/utils')."
+        ),
     )
     create_parents: bool = Field(
         default=True,
@@ -36,17 +39,3 @@ class MoveFileRequest(BaseModel):
         default=False,
         description="Replace the destination file if it already exists.",
     )
-
-
-class MoveFileResponse(BaseModel):
-    """Output schema for the move_file tool.
-
-    Attributes:
-        source_path: Absolute path of the original file location.
-        destination_path: Absolute path of the new file location.
-        overwritten: True if an existing file at the destination was replaced.
-    """
-
-    source_path: str = Field(description="Absolute path of the original file location.")
-    destination_path: str = Field(description="Absolute path of the new file location.")
-    overwritten: bool = Field(description="True if an existing file was overwritten.")

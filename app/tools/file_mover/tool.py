@@ -1,13 +1,14 @@
 import os
 from pathlib import Path
 
-from app.mcp import get_mcp
+from app.core import build_not_found_message, resolve_entry_in_project, to_relative_display
 from app.storage import get_project_storage
-from app.core import resolve_entry_in_project
+from app.tools.registration import register_tool
 
-from .schemas import MoveFileRequest, MoveFileResponse
+from .description import TOOL_DESCRIPTION
+from .schemas import MoveFileRequest
 
-mcp = get_mcp()
+
 project_storage = get_project_storage()
 
 
@@ -29,8 +30,7 @@ def _is_same_entry(first: Path, second: Path) -> bool:
     return os.path.samestat(first.lstat(), second.lstat())
 
 
-@mcp.tool()
-def move_file(request: MoveFileRequest) -> MoveFileResponse:
+def move_file(request: MoveFileRequest) -> str:
     """Move or rename a file inside a registered project.
 
     Both source and destination must remain within the project root and
@@ -39,21 +39,38 @@ def move_file(request: MoveFileRequest) -> MoveFileResponse:
     moved itself, never its target; a relative link may no longer resolve
     once moved. Behaves the same on POSIX and Windows, including case-only
     renames on case-insensitive filesystems.
+
+    Args:
+        request: Project, source, destination and overwrite policy.
+
+    Returns:
+        A one-line summary of the move, saying whether a file was replaced.
+
+    Raises:
+        PathOutsideProjectError: If a path escapes the project root.
+        ProtectedPathError: If a path is inside '.git'.
+        FileNotFoundError: If the source does not exist (the message
+                           suggests similar paths), or the destination
+                           directory is missing and create_parents is False.
+        IsADirectoryError: If the source or the destination is a directory.
+        FileExistsError: If the destination exists and overwrite is False.
     """
     project_root = project_storage.resolve_project_path(request.project_id)
 
     source = resolve_entry_in_project(project_root, request.source_path)
     destination = resolve_entry_in_project(project_root, request.destination_path)
+    source_display = to_relative_display(project_root, source)
+    destination_display = to_relative_display(project_root, destination)
 
     # NOTE: exists() follows symlinks, so a broken link would look missing.
     source_is_link = source.is_symlink()
 
     if not (source_is_link or source.exists()):
-        raise FileNotFoundError(f"Source file '{source}' does not exist.")
+        raise FileNotFoundError(build_not_found_message(project_root, request.source_path, "Source file"))
 
     if source.is_dir() and not source_is_link:
         raise IsADirectoryError(
-            f"Source '{source}' is a directory. This tool only moves individual files."
+            f"Source '{source_display}' is a directory: this tool only moves individual files."
         )
 
     destination_is_occupied = destination.is_symlink() or destination.exists()
@@ -73,16 +90,16 @@ def move_file(request: MoveFileRequest) -> MoveFileResponse:
 
     if will_overwrite and not request.overwrite:
         raise FileExistsError(
-            f"Destination '{destination}' already exists. "
-            f"Set overwrite=True to replace it."
+            f"Destination '{destination_display}' already exists. "
+            f"Set overwrite=true to replace it."
         )
 
     if request.create_parents:
         destination.parent.mkdir(parents=True, exist_ok=True)
     elif not destination.parent.exists():
         raise FileNotFoundError(
-            f"Destination directory '{destination.parent}' does not exist. "
-            f"Set create_parents=True to create it automatically."
+            f"Destination directory '{to_relative_display(project_root, destination.parent)}' "
+            f"does not exist. Set create_parents=true to create it automatically."
         )
 
     if is_same_entry and not is_case_only_rename:
@@ -97,8 +114,9 @@ def move_file(request: MoveFileRequest) -> MoveFileResponse:
         # platform; the overwrite policy has been enforced just above.
         source.replace(destination)
 
-    return MoveFileResponse(
-        source_path=str(source),
-        destination_path=str(destination),
-        overwritten=will_overwrite,
-    )
+    if will_overwrite:
+        return f"Moved '{source_display}' to '{destination_display}', replacing the previous file."
+    return f"Moved '{source_display}' to '{destination_display}'."
+
+
+register_tool(move_file, MoveFileRequest, TOOL_DESCRIPTION)

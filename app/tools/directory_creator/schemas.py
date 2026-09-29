@@ -13,24 +13,11 @@ class CreateDirectoryRequest(BaseModel):
                   exists. Defaults to True.
     """
 
-    project_id: str = Field(description="Registered project identifier.")
+    project_id: str = Field(description="Registered project identifier, as returned by list_projects.")
     relative_path: str = Field(
-        description="Path of the directory to create, relative to the project root."
+        description="Path of the directory to create, relative to the project root (e.g. 'app/services').",
     )
     exist_ok: bool = Field(
         default=True,
-        description="Suppress errors when the directory already exists.",
+        description="Succeed without error when the directory already exists.",
     )
-
-
-class CreateDirectoryResponse(BaseModel):
-    """Output schema for the create_directory tool.
-
-    Attributes:
-        created_path: Absolute path of the directory.
-        created: True if the directory was newly created. False if it
-                 already existed and exist_ok was True.
-    """
-
-    created_path: str = Field(description="Absolute path of the directory.")
-    created: bool = Field(description="True if the directory was newly created.")
